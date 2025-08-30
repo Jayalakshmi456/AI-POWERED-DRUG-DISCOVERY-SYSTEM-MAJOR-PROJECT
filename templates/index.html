@@ -1,0 +1,845 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Drug-Protein Interaction Prediction</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://3Dmol.org/build/3Dmol-min.js"></script>
+    <script src="https://3Dmol.org/build/3Dmol.ui-min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jquery@3.6.0/dist/jquery.min.js"></script>
+    <style>
+        .element-label {
+            padding: 2px 8px;
+            border-radius: 4px;
+            color: white;
+            font-weight: bold;
+            display: inline-block;
+            margin: 2px;
+        }
+        .element-C { background-color: #909090; }
+        .element-H { background-color: #404040; }
+        .element-N { background-color: #3050F8; }
+        .element-O { background-color: #FF0D0D; }
+        .element-S { background-color: #FFC832; color: black; }
+        .element-P { background-color: #FF8000; }
+    </style>
+    <style>
+        .molecule-card {
+            border: none;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            transition: all 0.3s ease;
+        }
+
+        .molecule-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 15px rgba(0, 0, 0, 0.1);
+        }
+
+        .viewer-container {
+            border-radius: 10px;
+            overflow: hidden;
+            background: linear-gradient(145deg, #f6f8fa, #ffffff);
+        }
+
+        .control-btn {
+            transition: all 0.2s ease;
+            border-radius: 20px;
+            padding: 5px 15px;
+        }
+
+        .control-btn:hover {
+            transform: scale(1.05);
+        }
+
+        .control-btn.active {
+            background: #007bff;
+            color: white;
+        }
+
+        .element-label {
+            padding: 4px 12px;
+            border-radius: 15px;
+            font-size: 0.9rem;
+            margin: 2px;
+            transition: all 0.2s ease;
+        }
+
+        .element-label:hover {
+            transform: scale(1.1);
+        }
+
+        .progress {
+            height: 10px;
+            border-radius: 5px;
+            background: #f0f0f0;
+        }
+
+        .progress-bar {
+            transition: width 1s ease;
+            background: linear-gradient(90deg, #007bff, #00d4ff);
+        }
+
+        .molecule-info {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 15px;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .fade-in {
+            animation: fadeIn 0.5s ease-out;
+        }
+    </style>
+    <style>
+        .element-badge {
+            padding: 0.25rem 0.5rem;
+            margin: 0.25rem;
+            border-radius: 4px;
+            font-size: 0.875rem;
+        }
+
+        #molecule-legend {
+            background-color: #f8f9fa;
+            padding: 0.5rem;
+            border-radius: 4px;
+            margin-bottom: 1rem;
+        }
+    </style>
+    <style>
+        .loading-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(255, 255, 255, 0.8);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+
+        #molecule-viewer {
+            position: relative;
+            background: #f8f9fa;
+            border-radius: 8px;
+        }
+    </style>
+    <style>
+        .sequence-display {
+            background-color: #f8f9fa;
+            padding: 0.5rem;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+        }
+
+        .sequence-display code {
+            flex-grow: 1;
+            overflow-x: auto;
+            white-space: nowrap;
+        }
+
+        .toast {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+        }
+        .spinner-border-sm {
+        width: 1rem;
+        height: 1rem;
+        margin-right: 0.5rem;
+    }
+    
+    .result-container {
+        opacity: 0;
+        transition: opacity 0.3s ease-in-out;
+    }
+    
+    .result-container.show {
+        opacity: 1;
+    }
+    </style>
+</head>
+<body>
+    <div class="container mt-5 fade-in">
+        <h1 class="mb-4 text-center">Drug-Protein Interaction Prediction</h1>
+        <div class="example-sequences mb-4">
+            <h5>Example Sequences:</h5>
+            <div class="accordion" id="sequenceAccordion">
+                <!-- Proteins -->
+                <div class="accordion-item">
+                    <h2 class="accordion-header">
+                        <button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#proteinCollapse">
+                            Protein Sequences
+                        </button>
+                    </h2>
+                    <div id="proteinCollapse" class="accordion-collapse collapse show">
+                        <div class="accordion-body">
+                            {% for protein in examples.protein %}
+                            <div class="sequence-item mb-3">
+                                <h6>{{ protein.name }}</h6>
+                                <p class="text-muted small">{{ protein.description }}</p>
+                                <div class="sequence-display">
+                                    <code class="small">{{ protein.sequence[:50] }}...</code>
+                                    <button class="btn btn-sm btn-outline-primary ms-2" 
+                                            onclick="copySequence('{{ protein.sequence }}')">
+                                        Copy
+                                    </button>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+                <!-- Drugs -->
+                <div class="accordion-item">
+                    <h2 class="accordion-header">
+                        <button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#drugCollapse">
+                            Drug SMILES
+                        </button>
+                    </h2>
+                    <div id="drugCollapse" class="accordion-collapse collapse">
+                        <div class="accordion-body">
+                            {% for drug in examples.drug %}
+                            <div class="sequence-item mb-3">
+                                <h6>{{ drug.name }}</h6>
+                                <p class="text-muted small">{{ drug.description }}</p>
+                                <div class="sequence-display">
+                                    <code class="small">{{ drug.smiles }}</code>
+                                    <button class="btn btn-sm btn-outline-primary ms-2" 
+                                            onclick="copySequence('{{ drug.smiles }}')">
+                                        Copy
+                                    </button>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="molecule-card card mb-4">
+            <div class="card-body">
+                <!-- Update form section -->
+                <form id="prediction-form" class="needs-validation" novalidate>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label fw-bold">Protein Sequence (FASTA)</label>
+                            <textarea 
+                                class="form-control" 
+                                id="proteinSequence" 
+                                name="proteinSequence"
+                                rows="4" 
+                                required
+                                placeholder="Enter protein sequence or click 'Use Example'"
+                            ></textarea>
+                            <div class="invalid-feedback">
+                                Please enter a protein sequence
+                            </div>
+                            <button type="button" class="btn btn-sm btn-outline-secondary mt-2 control-btn" onclick="useExample('protein')">
+                                Use Example
+                            </button>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label fw-bold">Drug SMILES Sequence</label>
+                            <textarea 
+                                class="form-control" 
+                                id="drugSequence" 
+                                name="drugSequence"
+                                rows="4" 
+                                required
+                                placeholder="Enter drug SMILES sequence or click 'Use Example'"
+                            ></textarea>
+                            <div class="invalid-feedback">
+                                Please enter a drug SMILES sequence
+                            </div>
+                            <button type="button" class="btn btn-sm btn-outline-secondary mt-2 control-btn" onclick="useExample('drug')">
+                                Use Example
+                            </button>
+                        </div>
+                    </div>
+                    <div class="text-center">
+                        <button type="submit" class="btn btn-primary control-btn px-4">
+                            Predict Interaction
+                        </button>
+                        <button type="reset" class="btn btn-outline-secondary control-btn px-4 ms-2">
+                            Reset
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <div class="molecule-card card mb-4">
+            <div class="card-body">
+                <div class="result-container">
+                    <div id="result"></div>
+                    <div id="heatmap-container" class="mt-4">
+                        <h4>Interaction Heatmap</h4>
+                        <img id="heatmap" class="img-fluid">
+                    </div>
+                    <div id="interaction-statement" class="mt-3 alert alert-info"></div>
+                    <div id="drug-info" class="mt-3">
+                        <h4>Drug Information</h4>
+                        <p id="drug-name"></p>
+                    </div>
+                    <div class="progress mt-3">
+                        <div class="progress-bar progress-bar-striped progress-bar-animated" 
+                             role="progressbar" 
+                             style="width: 0%">
+                            Processing...
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row mt-4">
+            <div class="col-md-12">
+                <div class="molecule-card card">
+                    <div class="card-body">
+                        <h5 class="card-title mb-3">3D Molecule Viewer</h5>
+                        <div class="viewer-container mb-3">
+                            <!-- Changed ID to match the one used in JavaScript -->
+                            <div id="molecule-viewer" style="height: 400px; width: 100%; position: relative; border: 1px solid #ddd; border-radius: 4px;">
+                                <div id="loading" class="d-none loading-overlay">
+                                    <div class="spinner-border text-primary" role="status">
+                                        <span class="visually-hidden">Loading...</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="molecule-info mt-3">
+                            <h6>Element Guide:</h6>
+                            <div id="element-list" class="d-flex flex-wrap gap-2"></div>
+                        </div>
+                        <div class="d-flex flex-wrap gap-2 mt-3">
+                            <div class="btn-group">
+                                <button class="btn btn-sm btn-outline-primary" onclick="toggleSpin()">Spin</button>
+                                <button class="btn btn-sm btn-outline-primary" onclick="toggleLabels()">Labels</button>
+                                <button class="btn btn-sm btn-outline-primary" onclick="resetView()">Reset</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-12 mt-4">
+            <div class="card">
+                <div class="card-body">
+                    <h5>Interaction Analysis</h5>
+                    <div class="row">
+                        <div class="col-md-12">
+                            <h6>Binding Probability Score</h6>
+                            <div class="progress mb-3">
+                                <div id="bindingScore" 
+                                     class="progress-bar" 
+                                     role="progressbar" 
+                                     style="width: 0%">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const examples = {{ examples|tojson|safe }};
+        let currentViewer = null;
+        let currentMolBlock = null;
+
+        let viewer = null;
+        const elementColors = {
+            'C': '#909090',
+            'H': '#404040',
+            'N': '#3050F8',
+            'O': '#FF0D0D',
+            'S': '#FFC832',
+            'P': '#FF8000'
+        };
+
+        const drugProteinPairs = [
+            {
+                name: "Donepezil - Acetylcholinesterase",
+                description: "Alzheimer's treatment",
+                drug: "CCN(C)C(=O)Oc1ccc2c(c1)C(=O)N(C)c1ccccc1-2",
+                protein: "MEILPVGAAGPRLLLPPLLLLLLLGCVGGGGGAAHSRPQVQLQVPGPVLDQALAQVDGGAEPRNLVPVTPTSLGPQDKGLVCPPRGHVLNLRPLPGPRQAFWQWSLLLRLPRGLLLLWVAPGAAGAQHSSVNGYFEWIQDQGGWWAGLEINILTFPEGTASEEDRLYCYEKILGQEVPALELEPLQAIGRGLSAQTGRHGEVCPQPWLAPLTHPKGADGTSCRSECQRGHSQPWQASLVLGYLWSLRRGLDLQGLHEAPGAVWLHCHALAQLTVLPDLPQHFQHWLVVLLLLLGGSALGTQEA"
+            },
+            {
+                name: "Metformin - Insulin Receptor",
+                description: "Diabetes treatment",
+                drug: "CN(C)C(=N)NC(=N)N",
+                protein: "MATGGRRGAAAAPLLVAVAALLLGAAGHLYPGEVCPGMDIRNNLTRLHELENCSVIEGHLQILLMFKTRPEDFRDLSFPKLIMITDYLLLFRVYGLESLKDLFPNLTVIRGSRLFFNYALVIFEMVHLKELGLYNLMNITRGSVRIEKNNELCYLATIDWSRILDSVEDNHIVLNKDDNEECGDICPGTAKGKTNCPATVINGQFVERCWTHSHCQKVCPTICKSHGCTAEGLCCHSECLGNCSQPDDPTKCVACRNFYLDGRCVETCPPPYYHFQDWRCVNFSFCQDLHHKCKNSRRQGCHQYVIHNNKCIPECPSGYTMNSSNLLCTPCLGPCPKVCHLLEGEKTIDSVTSAQELRGCTVINGSLIINIRGGNNLAAELEANLGLIEEISGYLKIRRSYALVSLSFFRKLRLIRGETLEIGNYSFYALDNQNLRQLWDWSKHNLTITQGKLFFHYNPKLCLSEIHKMEEVSGTKGRQERNDIALKTNGDQASCENELLKFSYIRTSFDKILLRWEPYWPPDFRDLLGFMLFYKEAPYQNVTEFDGQDACGSNSWTVVDIDPPLRSNDPKSQNHPGWLMRGLKPWTQYAIFVKTLVTFSDERRTYGAKSDIIYVQTDATNPSVPLDPISVSNSSSQIILKWKPPSDPNGNITHYLVFWERQAEDSELFELDYCLKGLKLPSRTWSPPFESEDSQKHNQSEYEDSAGECCSCPKTDSQILKELEESSFRKTFEDYLHNVVFVPRKTSSGTGAEDPRPSRKRRSLGDVGNVTVAVPTVAAFPNTSSTSVPTSPEEHRPFEKVVNKESLVISGLRHFTGYRIELQACNQDTPEERCSVAAYVSARTMPEAKADDIVGPVTHEIFENNVVHLMWQEPKEPNGLIVLYEVSYRRYGDEELHLCVSRKHFALERGCRLRGLSPGNYSVRIRATSLAGNGSWTEPTYFYVTDYLDVPSNIAKIIIGPLIFVFLFSVVIGSIYLFLRKRQPDGPLGPLYASSNPEYLSASDVFPCSVYVPDEWEVSREKITLLRELGQGSFGMVYEGNARDIIKGEAETRVAVKTVNESASLRERIEFLNEASVMKGFTCHHVVRLLGVVSKGQPTLVVMELMAHGDLKSYLRSLRPEAENNPGRPPPTLQEMIQMAAEIADGMAYLNAKKFVHRDLAARNCMVAHDFTVKIGDFGMTRDIYETDYYRKGGKGLLPVRWMAPESLKDGVFTTSSDMWSFGVVLWEITSLAEQPYQGLSNEQVLKFVMDGGYLDQPDNCPERVTDLMRMCWQFNPKMRPTFLEIVNLLKDDLHPSFPEVSFFHSEENKAPESEELEMEFEDMENVPLDRSSHCQREEAGGRDGGSSLGFKRSYEEHIPYTHMNGGKKNGRILTLPRSNPS"
+            },
+            {
+                name: "Albuterol - Beta-2 Adrenergic Receptor",
+                description: "Asthma/COPD treatment",
+                drug: "CC(C)(C)NCC(O)c1ccc(O)c(CO)c1",
+                protein: "MGQPGNGSAFLLAPNGSHAPDHDVTQERDEVWVVGMGIVMSLIVLAIVFGNVLVITAIAKFERLQTVTNYFITSLACADLVMGLAVVPFGAAHILMKMWTFGNFWCEFWTSIDVLCVTASIETLCVIAVDRYFAITSPFKYQSLLTKNKARVIILMVWIVSGLTSFLPIQMHWYRATHQEAINCYANETCCDFFTNQAYAIASSIVSFYVPLVIMVFVYSRVFQEAKRQLQKIDKSEGRFHVQNLSQVEQDGRTGHGLRRSSKFCLKEHKALKTLGIIMGTFTLCWLPFFIVNIVHVIQDNLIRKEVYILLNWIGYVNSGFNPLIYCRSPDFRIAFQELLCLRRSSLKAYGNGYSSNGNTGEQSGYHVEQEKENKLLCEDLPGTEDFVGHQGTVPSDNIDSQGRNCSTNDSLL"
+            }
+        ];
+
+        function initViewer() {
+            const viewerContainer = document.getElementById('molecule-viewer');
+            if (!viewerContainer) {
+                console.error('Viewer container not found');
+                return null;
+            }
+
+            try {
+                // Clear existing viewer if it exists
+                if (viewer) {
+                    viewer.removeAllModels();
+                } else {
+                    // Create new viewer with specific dimensions
+                    viewer = $3Dmol.createViewer(viewerContainer, {
+                        backgroundColor: 'white',
+                        height: 400,
+                        width: viewerContainer.offsetWidth,
+                        defaultcolors: $3Dmol.elementColors.rasmol
+                    });
+                }
+
+                // Set default settings
+                viewer.setHoverable({}, true, 
+                    function(atom,viewer,event,container) {
+                        if(!atom.label) {
+                            atom.label = viewer.addLabel(atom.elem + atom.serial,
+                                {position: atom, backgroundColor: 'mintcream', fontColor:'black'});
+                        }
+                    },
+                    function(atom) {
+                        if(atom.label) {
+                            viewer.removeLabel(atom.label);
+                            delete atom.label;
+                        }
+                    }
+                );
+
+                return viewer;
+            } catch (error) {
+                console.error('Error initializing viewer:', error);
+                return null;
+            }
+        }
+
+        function useExample(type) {
+            document.getElementById(`${type}Sequence`).value = examples[type];
+        }
+
+        function showLoading() {
+            document.getElementById('loading').classList.remove('d-none');
+        }
+
+        function hideLoading() {
+            document.getElementById('loading').classList.add('d-none');
+        }
+
+        async function visualizeMolecule(drugSequence, isPositive) {
+            try {
+                showLoading();
+                const response = await fetch('/visualize', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        drugSequence: drugSequence,
+                        isPositive: isPositive
+                    })
+                });
+
+                const result = await response.json();
+                if (result.success) {
+                    // Initialize or clear existing viewer
+                    const viewer = initViewer();
+                    if (!viewer) {
+                        throw new Error('Failed to initialize viewer');
+                    }
+
+                    // Add the model and set visualization style
+                    const model = viewer.addModel(result.pdb_data, "pdb");
+                    
+                    // Set detailed molecular visualization style
+                    viewer.setStyle({}, {
+                        stick: {
+                            radius: 0.2,
+                            colorscheme: 'element'
+                        },
+                        sphere: {
+                            radius: 0.5,
+                            colorscheme: 'element'
+                        }
+                    });
+
+                    // Add background color and set proper camera
+                    viewer.setBackgroundColor('white');
+                    viewer.zoomTo();
+                    
+                    // Update element list
+                    updateElementList(viewer);
+                    
+                    // Final render
+                    viewer.render();
+                } else {
+                    throw new Error(result.error);
+                }
+            } catch (error) {
+                console.error('Error visualizing molecule:', error);
+                document.getElementById('molecule_info').innerHTML = `
+                    <div class="alert alert-danger">
+                        Error visualizing molecule: ${error.message}
+                    </div>
+                `;
+            } finally {
+                hideLoading();
+            }
+        }
+
+        async function createBenzene() {
+            try {
+                showLoading();
+                const response = await fetch('/create_benzene', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                const result = await response.json();
+                if (result.success) {
+                    const viewer = initViewer();
+                    if (!viewer) {
+                        throw new Error('Failed to initialize viewer');
+                    }
+                    
+                    // Add model
+                    viewer.addModel(result.pdb_data, "pdb");
+                    
+                    // Set style for carbon atoms - bolder and darker
+                    viewer.setStyle({atom: "C"}, {
+                        stick: {
+                            radius: 0.25,          // Increased radius for bolder appearance
+                            color: '#222222'       // Darker color for better contrast
+                        },
+                        sphere: {
+                            radius: 0.8,           // Added spheres at carbon positions
+                            color: '#222222'
+                        }
+                    });
+                    
+                    // Set style for hydrogen atoms - subtle but visible
+                    viewer.setStyle({atom: "H"}, {
+                        stick: {
+                            radius: 0.15,          // Thinner than carbon bonds
+                            color: '#808080'       // Medium grey color
+                        },
+                        sphere: {
+                            radius: 0.4,           // Smaller spheres for hydrogens
+                            color: '#808080'
+                        }
+                    });
+                    
+                    // Enhanced double bond visualization
+                    viewer.setStyle({bonds: true}, {
+                        line: {
+                            width: 2.5,            // Thicker lines for double bonds
+                            color: '#000000'       // Pure black for bonds
+                        }
+                    });
+                    
+                    // Set material properties for better 3D appearance
+                    viewer.setStyle({}, {
+                        stick: {
+                            shininess: 100,        // Increased shininess
+                            specular: '#ffffff'     // White specular highlights
+                        }
+                    });
+                    
+                    // Adjust view for perfect top-down perspective
+                    viewer.rotate(90, 'x');
+                    viewer.rotate(90, 'y');
+                    
+                    // Add ambient occlusion for better depth perception
+                    viewer.setViewStyle({
+                        style: 'outline',
+                        color: '#222222',
+                        width: 0.8
+                    });
+                    
+                    // Set white background and zoom
+                    viewer.setBackgroundColor('white');
+                    viewer.zoomTo();
+                    
+                    // Final render with higher quality
+                    viewer.render();
+                    
+                    // Update SMILES input
+                    const smilesInput = document.getElementById('drugSequence');
+                    if (smilesInput) {
+                        smilesInput.value = result.smiles;
+                    }
+                    
+                    // Update element list
+                    updateElementList(viewer);
+                } else {
+                    throw new Error(result.error);
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                document.getElementById('molecule_info').innerHTML = `
+                    <div class="alert alert-danger">
+                        ${error.message}
+                    </div>
+                `;
+            } finally {
+                hideLoading();
+            }
+        }
+
+        function updateElementList(viewer) {
+            const elementList = document.getElementById('element-list');
+            if (!elementList || !viewer) return;
+
+            const elements = new Set();
+            const model = viewer.getModel();
+            if (model) {
+                model.selectedAtoms({}).forEach(atom => {
+                    elements.add(atom.elem);
+                });
+
+                elementList.innerHTML = Array.from(elements)
+                    .map(elem => `
+                        <span class="element-badge" style="background-color: ${elementColors[elem] || '#808080'}">
+                            ${elem}
+                        </span>
+                    `).join('');
+            }
+        }
+
+        function toggleSpin() {
+            if (!viewer) return;
+            if (!viewer.isSpinning) {
+                viewer.spin(true);
+                viewer.isSpinning = true;
+            } else {
+                viewer.spin(false);
+                viewer.isSpinning = false;
+            }
+        }
+
+        function toggleLabels() {
+            if (!viewer) return;
+            if (!window.labelsVisible) {
+                const atoms = viewer.getModel().selectedAtoms({});
+                atoms.forEach((atom) => {
+                    viewer.addLabel(atom.elem, {
+                        position: atom,
+                        backgroundColor: 'transparent',
+                        fontColor: elementColors[atom.elem] || '#808080',
+                        fontSize: 14
+                    });
+                });
+                window.labelsVisible = true;
+            } else {
+                viewer.removeAllLabels();
+                window.labelsVisible = false;
+            }
+            viewer.render();
+        }
+
+        function resetView() {
+            if (!viewer) return;
+            viewer.zoomTo();
+            viewer.spin(false);
+            viewer.isSpinning = false;
+            viewer.render();
+        }
+
+        function displayResults(result) {
+    if (result.success) {
+        // Show the result container
+        const resultContainer = document.querySelector('.result-container');
+        resultContainer.style.opacity = '1';
+        
+        // Update the result display
+        const resultDiv = document.getElementById('result');
+        const probability = result.analysis.probability;
+        const isPositive = probability > 50;
+        
+        resultDiv.innerHTML = `
+            <div class="alert ${isPositive ? 'alert-success' : 'alert-danger'} mb-4">
+                <h4 class="alert-heading">${isPositive ? 'Positive' : 'Negative'} Interaction Detected</h4>
+                <hr>
+                <div class="row">
+                    <div class="col-md-6">
+                        <p><strong>Binding Probability:</strong> ${probability.toFixed(1)}%</p>
+                        <p><strong>Binding Strength:</strong> ${result.analysis.binding_strength}</p>
+                    </div>
+                    <div class="col-md-6">
+                        <p><strong>Confidence Level:</strong> ${result.analysis.confidence_level}</p>
+                        <p><strong>Interaction Type:</strong> ${result.analysis.interaction_type}</p>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        // Update interaction statement
+        const statementDiv = document.getElementById('interaction-statement');
+        statementDiv.innerHTML = result.interaction_statement;
+        statementDiv.className = `alert ${isPositive ? 'alert-success' : 'alert-danger'}`;
+
+        // Update heatmap
+        const heatmapContainer = document.getElementById('heatmap-container');
+        const heatmapImg = document.getElementById('heatmap');
+        if (heatmapImg && result.heatmap) {
+            heatmapImg.src = result.heatmap;
+            heatmapImg.style.display = 'block';
+            heatmapContainer.style.display = 'block';
+        }
+
+        // Update binding score progress bar
+        const bindingScore = document.getElementById('bindingScore');
+        if (bindingScore) {
+            bindingScore.style.width = `${probability}%`;
+            bindingScore.textContent = `${probability.toFixed(1)}%`;
+            bindingScore.className = `progress-bar progress-bar-striped ${
+                isPositive ? 'bg-success' : 'bg-danger'
+            }`;
+        }
+
+        // Make results visible and scroll to them
+        resultContainer.classList.add('show');
+        resultContainer.scrollIntoView({ behavior: 'smooth' });
+    } else {
+        // Handle error
+        document.getElementById('result').innerHTML = `
+            <div class="alert alert-danger">
+                <strong>Error:</strong> ${result.error || 'Unknown error occurred'}
+            </div>
+        `;
+    }
+}
+
+        async function handlePrediction(event) {
+    event.preventDefault();
+    try {
+        // Show loading state
+        const submitButton = event.target.querySelector('button[type="submit"]');
+        submitButton.disabled = true;
+        submitButton.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Processing...';
+
+        // Get input values
+        const drugSequence = document.getElementById('drugSequence').value.trim();
+        const proteinSequence = document.getElementById('proteinSequence').value.trim();
+
+        // Validate inputs
+        if (!drugSequence || !proteinSequence) {
+            throw new Error('Please enter both drug and protein sequences');
+        }
+
+        // Make prediction request
+        const response = await fetch('/predict', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                drugSequence: drugSequence,
+                proteinSequence: proteinSequence
+            })
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const result = await response.json();
+        
+        if (result.success) {
+            // Display results
+            displayResults(result);
+            
+            // Visualize molecule
+            await visualizeMolecule(drugSequence, result.analysis.probability > 50);
+            
+            // Scroll to results
+            document.querySelector('.result-container').scrollIntoView({ behavior: 'smooth' });
+        } else {
+            throw new Error(result.error || 'Prediction failed');
+        }
+
+    } catch (error) {
+        console.error('Error:', error);
+        // Display error message
+        document.getElementById('result').innerHTML = `
+            <div class="alert alert-danger">
+                <strong>Error:</strong> ${error.message}
+            </div>
+        `;
+    } finally {
+        // Reset button state
+        const submitButton = document.querySelector('button[type="submit"]');
+        submitButton.disabled = false;
+        submitButton.innerHTML = 'Predict Interaction';
+    }
+}
+
+        document.getElementById('prediction-form').addEventListener('submit', handlePrediction);
+
+        document.addEventListener('DOMContentLoaded', function() {
+            const form = document.getElementById('prediction-form');
+            
+            if (!form) return;
+
+            // Add validation styles on submit
+            form.addEventListener('submit', function(event) {
+                if (!form.checkValidity()) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                }
+                form.classList.add('was-validated');
+            });
+
+            // Clear validation styles on reset
+            form.addEventListener('reset', function() {
+                form.classList.remove('was-validated');
+                const resultDiv = document.getElementById('result');
+                if (resultDiv) {
+                    resultDiv.innerHTML = '';
+                }
+            });
+        });
+
+        function copySequence(sequence) {
+            navigator.clipboard.writeText(sequence).then(() => {
+                // Show temporary success message
+                const toast = new bootstrap.Toast(document.getElementById('copyToast'));
+                toast.show();
+            });
+        }
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+
+    <!-- Add this right before the closing </body> tag -->
+    <div class="toast-container position-fixed bottom-0 end-0 p-3">
+        <div id="copyToast" class="toast" role="alert" aria-live="assertive" aria-atomic="true">
+            <div class="toast-header">
+                <strong class="me-auto">Success</strong>
+                <button type="button" class="btn-close" data-bs-dismiss="toast" aria-label="Close"></button>
+            </div>
+            <div class="toast-body">
+                Sequence copied to clipboard!
+            </div>
+        </div>
+    </div>
+</body>
+</html>
